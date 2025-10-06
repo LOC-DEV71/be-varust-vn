@@ -11,7 +11,7 @@ const SECRET_KEY = "mysecretkey";
 app.use(cors());
 app.use(express.json());
 
-// Middleware xác thực token
+// Middleware xác thực token  
 function verifyToken(req, res, next) {
   const authHeader = req.headers["authorization"];
   if (!authHeader) return res.status(401).json({ message: "Thiếu token" });
@@ -113,27 +113,33 @@ app.delete("/users/:id", verifyAdmin, async (req, res) => {
 
 //  Register
 app.post("/register", async (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password)
+  const { username, email, password, phone } = req.body;
+  if (!username || !email || !password || !phone) {
     return res.status(400).json({ success: false, message: "Thiếu thông tin" });
+  }
 
   try {
+    // Kiểm tra trùng username, email, phone
     const [dup] = await db.execute(
-      "SELECT id FROM users WHERE username = ? OR email = ?",
-      [username, email]
+      "SELECT id FROM users WHERE username = ? OR email = ? OR phone = ?",
+      [username, email, phone]
     );
-    if (dup.length)
+    if (dup.length) {
       return res
         .status(409)
-        .json({ success: false, message: "Username hoặc email đã tồn tại" });
+        .json({ success: false, message: "Username, email hoặc phone đã tồn tại" });
+    }
 
+    // Mã hoá mật khẩu
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Lưu user mới
     const [result] = await db.execute(
-      "INSERT INTO users (username, email, password, role) VALUES (?, ?, ?, 'user')",
-      [username, email, hashedPassword]
+      "INSERT INTO users (username, email, password, phone, role) VALUES (?, ?, ?, ?, 'user')",
+      [username, email, hashedPassword, phone]
     );
 
+    // Tạo token
     const token = jwt.sign(
       { id: result.insertId, username, role: "user" },
       SECRET_KEY,
@@ -146,6 +152,7 @@ app.post("/register", async (req, res) => {
     res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
 
 //  Login
 app.post("/login", async (req, res) => {
