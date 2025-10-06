@@ -119,7 +119,6 @@ app.post("/register", async (req, res) => {
   }
 
   try {
-    // Kiểm tra trùng username, email, phone
     const [dup] = await db.execute(
       "SELECT id FROM users WHERE username = ? OR email = ? OR phone = ?",
       [username, email, phone]
@@ -130,16 +129,16 @@ app.post("/register", async (req, res) => {
         .json({ success: false, message: "Username, email hoặc phone đã tồn tại" });
     }
 
-    // Mã hoá mật khẩu
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Lưu user mới
+
     const [result] = await db.execute(
       "INSERT INTO users (username, email, password, phone, role) VALUES (?, ?, ?, ?, 'user')",
       [username, email, hashedPassword, phone]
     );
 
-    // Tạo token
+
     const token = jwt.sign(
       { id: result.insertId, username, role: "user" },
       SECRET_KEY,
@@ -185,7 +184,7 @@ app.post("/login", async (req, res) => {
       { expiresIn: "1h" }
     );
 
-    res.json({ success: true, message: "Login thành công", token });
+    res.json({ success: true, message: "Login thành công", token, role: user.role });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: "Server error" });
