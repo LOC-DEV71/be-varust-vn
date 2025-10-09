@@ -5,6 +5,7 @@
   const path = require("path");
   const multer = require("multer");
   const db = require("./dataBase/db");
+  const fs = require("fs");
   require("dotenv").config();
 
   const app = express();
@@ -180,46 +181,180 @@
     }
   });
 
-  // -------- PRODUCTS (có upload ảnh) --------
-  app.get("/products", async (req, res) => {
+  // -------- PRODUCTS (có upload nhiều ảnh) --------
+app.get("/products", async (req, res) => {
+  try {
     const [rows] = await db.execute("SELECT * FROM products ORDER BY id DESC");
     res.json(rows);
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
 
-  app.post("/products", verifyAdmin, upload.single("image"), async (req, res) => {
-    const { title, price, quantity, description, category } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+// Tạo sản phẩm
+app.post(
+  "/products",
+  verifyAdmin,
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "images1", maxCount: 1 },
+    { name: "images2", maxCount: 1 },
+    { name: "images3", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        title,
+        price,
+        quantity,
+        description,
+        category,
+        hang,
+        kieumanhinh,
+        kichthuoc,
+        tamnen,
+        tansoquet,
+        dophangiai,
+        nhucausudung,
+      } = req.body;
 
-    await db.execute(
-      "INSERT INTO products (title, price, quantity, description, category, image) VALUES (?, ?, ?, ?, ?, ?)",
-      [title, price, quantity, description, category, image]
-    );
-    res.json({ success: true, message: "Thêm sản phẩm thành công" });
-  });
+      const image = req.files["image"] ? `/uploads/${req.files["image"][0].filename}` : null;
+      const images1 = req.files["images1"] ? `/uploads/${req.files["images1"][0].filename}` : null;
+      const images2 = req.files["images2"] ? `/uploads/${req.files["images2"][0].filename}` : null;
+      const images3 = req.files["images3"] ? `/uploads/${req.files["images3"][0].filename}` : null;
 
-  app.put("/products/:id", verifyAdmin, upload.single("image"), async (req, res) => {
-    const { title, price, quantity, description, category } = req.body;
-    const image = req.file ? `/uploads/${req.file.filename}` : null;
+      await db.execute(
+        `INSERT INTO products 
+        (title, price, quantity, description, category, image, images1, images2, images3, hang, kieumanhinh, kichthuoc, tamnen, tansoquet, dophangiai, nhucausudung) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          title,
+          price,
+          quantity,
+          description,
+          category,
+          image,
+          images1,
+          images2,
+          images3,
+          hang,
+          kieumanhinh,
+          kichthuoc,
+          tamnen,
+          tansoquet,
+          dophangiai,
+          nhucausudung,
+        ]
+      );
 
-    let query =
-      "UPDATE products SET title=?, price=?, quantity=?, description=?, category=?";
-    let values = [title, price, quantity, description, category];
-
-    if (image) {
-      query += ", image=?";
-      values.push(image);
+      res.json({ success: true, message: "Thêm sản phẩm thành công" });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
     }
-    query += " WHERE id=?";
-    values.push(req.params.id);
+  }
+);
 
-    await db.execute(query, values);
-    res.json({ success: true, message: "Cập nhật sản phẩm thành công" });
-  });
+// Cập nhật sản phẩm
+app.put(
+  "/products/:id",
+  verifyAdmin,
+  upload.fields([
+    { name: "image", maxCount: 1 },
+    { name: "images1", maxCount: 1 },
+    { name: "images2", maxCount: 1 },
+    { name: "images3", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const {
+        title,
+        price,
+        quantity,
+        description,
+        category,
+        hang,
+        kieumanhinh,
+        kichthuoc,
+        tamnen,
+        tansoquet,
+        dophangiai,
+        nhucausudung,
+      } = req.body;
 
-  app.delete("/products/:id", verifyAdmin, async (req, res) => {
+      let query = `UPDATE products 
+                   SET title=?, price=?, quantity=?, description=?, category=?, hang=?, kieumanhinh=?, kichthuoc=?, tamnen=?, tansoquet=?, dophangiai=?, nhucausudung=?`;
+      let values = [
+        title,
+        price,
+        quantity,
+        description,
+        category,
+        hang,
+        kieumanhinh,
+        kichthuoc,
+        tamnen,
+        tansoquet,
+        dophangiai,
+        nhucausudung,
+      ];
+
+      if (req.files["image"]) {
+        query += ", image=?";
+        values.push(`/uploads/${req.files["image"][0].filename}`);
+      }
+      if (req.files["images1"]) {
+        query += ", images1=?";
+        values.push(`/uploads/${req.files["images1"][0].filename}`);
+      }
+      if (req.files["images2"]) {
+        query += ", images2=?";
+        values.push(`/uploads/${req.files["images2"][0].filename}`);
+      }
+      if (req.files["images3"]) {
+        query += ", images3=?";
+        values.push(`/uploads/${req.files["images3"][0].filename}`);
+      }
+
+      query += " WHERE id=?";
+      values.push(req.params.id);
+
+      await db.execute(query, values);
+      res.json({ success: true, message: "Cập nhật sản phẩm thành công" });
+    } catch (err) {
+      res.status(500).json({ success: false, message: err.message });
+    }
+  }
+);
+
+// Xóa sản phẩm
+app.delete("/products/:id", verifyAdmin, async (req, res) => {
+  try {
+    // Lấy ảnh cũ ra từ DB
+    const [rows] = await db.execute(
+      "SELECT image, images1, images2, images3 FROM products WHERE id=?",
+      [req.params.id]
+    );
+
+    if (rows.length > 0) {
+      const product = rows[0];
+      [product.image, product.images1, product.images2, product.images3].forEach((img) => {
+        if (img) {
+          const filePath = path.join(__dirname, img);
+          fs.unlink(filePath, (err) => {
+            if (err) console.warn("Không tìm thấy file:", filePath);
+          });
+        }
+      });
+    }
+
+    // Xoá record trong DB
     await db.execute("DELETE FROM products WHERE id=?", [req.params.id]);
     res.json({ success: true, message: "Xóa sản phẩm thành công" });
-  });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 
   // -------- NEWS --------
   app.get("/news", async (req, res) => {
