@@ -207,6 +207,7 @@ app.post(
         title,
         price,
         quantity,
+        sale,
         description,
         category,
         hang,
@@ -225,12 +226,14 @@ app.post(
 
       await db.execute(
         `INSERT INTO products 
-        (title, price, quantity, description, category, image, images1, images2, images3, hang, kieumanhinh, kichthuoc, tamnen, tansoquet, dophangiai, nhucausudung) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (title, price, quantity, sale, description, category, image, images1, images2, images3, hang, kieumanhinh, kichthuoc, tamnen, tansoquet, dophangiai, nhucausudung) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
         [
           title,
           price,
           quantity,
+          sale || 0,
           description,
           category,
           image,
@@ -270,6 +273,7 @@ app.put(
         title,
         price,
         quantity,
+        sale,
         description,
         category,
         hang,
@@ -282,11 +286,12 @@ app.put(
       } = req.body;
 
       let query = `UPDATE products 
-                   SET title=?, price=?, quantity=?, description=?, category=?, hang=?, kieumanhinh=?, kichthuoc=?, tamnen=?, tansoquet=?, dophangiai=?, nhucausudung=?`;
+                   SET title=?, price=?, quantity=?, sale=?, description=?, category=?, hang=?, kieumanhinh=?, kichthuoc=?, tamnen=?, tansoquet=?, dophangiai=?, nhucausudung=?`;
       let values = [
         title,
         price,
         quantity,
+        sale || 0,
         description,
         category,
         hang,
@@ -354,6 +359,7 @@ app.delete("/products/:id", verifyAdmin, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 
   // -------- NEWS --------
