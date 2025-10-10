@@ -253,6 +253,7 @@ app.post(
       res.json({ success: true, message: "Thêm sản phẩm thành công" });
     } catch (err) {
       res.status(500).json({ success: false, message: err.message });
+      console.log("Lỗi thêm sản phẩm", err)
     }
   }
 );
