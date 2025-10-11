@@ -392,38 +392,115 @@ app.delete("/products/:id", verifyAdmin, async (req, res) => {
     res.json({ success: true, message: "Xóa tin tức thành công" });
   });
 
-  // -------- CART --------
-  app.get("/cart/:userId", async (req, res) => {
-    const { userId } = req.params;
+  // =================== CART APIs ===================
+
+// 1. Add to Cart
+app.post("/cart", async (req, res) => {
+  const { user_id, product_id, quantity } = req.body;
+
+  try {
+    // Kiểm tra sản phẩm đã có trong giỏ hàng chưa
     const [rows] = await db.execute(
-      `SELECT c.id, p.title, p.price, c.quantity, c.status
-      FROM carts c
-      JOIN products p ON c.product_id = p.id
-      WHERE c.user_id = ?`,
+      "SELECT id, quantity FROM carts WHERE user_id=? AND product_id=? AND status='false'",
+      [user_id, product_id]
+    );
+
+    if (rows.length > 0) {
+      // Nếu có thì cộng dồn số lượng
+      const newQuantity = rows[0].quantity + quantity;
+      await db.execute(
+        "UPDATE carts SET quantity=? WHERE id=?",
+        [newQuantity, rows[0].id]
+      );
+      return res.json({ success: true, message: "Cập nhật số lượng giỏ hàng" });
+    } else {
+      // Nếu chưa có thì thêm mới
+      await db.execute(
+        "INSERT INTO carts (user_id, product_id, quantity) VALUES (?, ?, ?)",
+        [user_id, product_id, quantity]
+      );
+      return res.json({ success: true, message: "Đã thêm vào giỏ hàng" });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+// 2. Get Cart by User
+app.get("/cart/:userId", async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    const [rows] = await db.execute(
+      `SELECT 
+          c.id AS cart_id,
+          c.user_id,
+          c.product_id,
+          c.quantity,
+          c.status,
+          c.created_at,
+          p.title,
+          p.price,
+          p.image
+       FROM carts c
+       JOIN products p ON c.product_id = p.id
+       WHERE c.user_id = ?`,
       [userId]
     );
+
     res.json(rows);
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
 
-  app.post("/cart", async (req, res) => {
-    const { user_id, product_id, quantity } = req.body;
-    await db.execute(
-      "INSERT INTO carts (user_id, product_id, quantity) VALUES (?, ?, ?)",
-      [user_id, product_id, quantity]
-    );
-    res.json({ success: true, message: "Đã thêm vào giỏ hàng" });
-  });
+// 3. Update Cart Item (quantity, status, ...)
+app.put("/cart/:id", async (req, res) => {
+  const { id } = req.params;
+  const { quantity, status } = req.body;
 
-  app.put("/cart/:id", async (req, res) => {
-    const { quantity } = req.body;
-    await db.execute("UPDATE carts SET quantity=? WHERE id=?", [quantity, req.params.id]);
+  try {
+    let query = "UPDATE carts SET ";
+    const params = [];
+    
+    if (quantity !== undefined) {
+      query += "quantity=?, ";
+      params.push(quantity);
+    }
+
+    if (status !== undefined) {
+      query += "status=?, ";
+      params.push(status);
+    }
+
+    // Xóa dấu "," cuối cùng
+    query = query.slice(0, -2); 
+    query += " WHERE id=?";
+    params.push(id);
+
+    await db.execute(query, params);
     res.json({ success: true, message: "Cập nhật giỏ hàng thành công" });
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
 
-  app.delete("/cart/:id", async (req, res) => {
-    await db.execute("DELETE FROM carts WHERE id=?", [req.params.id]);
+// 4. Delete Cart Item
+app.delete("/cart/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await db.execute("DELETE FROM carts WHERE id=?", [id]);
     res.json({ success: true, message: "Xóa sản phẩm khỏi giỏ hàng thành công" });
-  });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
 
   // ================== 404 fallback ==================
   app.use((req, res) => {
