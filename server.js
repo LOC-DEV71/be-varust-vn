@@ -502,6 +502,118 @@ app.delete("/cart/:id", async (req, res) => {
 });
 
 
+// =================== ORDERS APIs ===================
+
+// Lấy tất cả đơn hàng (admin)
+app.get("/orders", verifyAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.execute("SELECT * FROM orders ORDER BY id DESC");
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Lấy đơn hàng theo user (user tự xem đơn của mình)
+app.get("/orders/user/:userId", verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.execute("SELECT * FROM orders WHERE user_id=? ORDER BY id DESC", [
+      req.params.userId,
+    ]);
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Đặt hàng từ giỏ hàng
+app.post("/orders", verifyToken, async (req, res) => {
+  const { receiver_name, phone, address } = req.body;
+  const userId = req.user.id;
+
+  try {
+    // Lấy giỏ hàng chưa checkout
+    const [cartItems] = await db.execute(
+      `SELECT c.*, p.price 
+       FROM carts c 
+       JOIN products p ON c.product_id = p.id 
+       WHERE c.user_id=? AND c.status='false'`,
+      [userId]
+    );
+
+    if (cartItems.length === 0) {
+      return res.status(400).json({ success: false, message: "Giỏ hàng trống" });
+    }
+
+    // Tính tổng
+    const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+    // Tạo order
+    const [orderResult] = await db.execute(
+      "INSERT INTO orders (user_id, receiver_name, phone, address, total, status) VALUES (?, ?, ?, ?, ?, 'pending')",
+      [userId, receiver_name, phone, address, total]
+    );
+
+    const orderId = orderResult.insertId;
+
+    // Thêm order_items
+    for (let item of cartItems) {
+      await db.execute(
+        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
+        [orderId, item.product_id, item.quantity, item.price]
+      );
+    }
+
+    // Update status giỏ hàng -> true
+    await db.execute("UPDATE carts SET status='true' WHERE user_id=?", [userId]);
+
+    res.json({ success: true, message: "Đặt hàng thành công", order_id: orderId });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+// Cập nhật trạng thái đơn hàng (admin)
+app.put("/orders/:id", verifyAdmin, async (req, res) => {
+  const { status } = req.body;
+  try {
+    await db.execute("UPDATE orders SET status=? WHERE id=?", [status, req.params.id]);
+    res.json({ success: true, message: "Cập nhật trạng thái đơn hàng thành công" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Xoá đơn hàng (admin)
+app.delete("/orders/:id", verifyAdmin, async (req, res) => {
+  try {
+    await db.execute("DELETE FROM order_items WHERE order_id=?", [req.params.id]);
+    await db.execute("DELETE FROM orders WHERE id=?", [req.params.id]);
+    res.json({ success: true, message: "Xóa đơn hàng thành công" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Xem chi tiết items trong đơn
+app.get("/order-items/:orderId", verifyToken, async (req, res) => {
+  try {
+    const [rows] = await db.execute(
+      `SELECT oi.*, p.title, p.image 
+       FROM order_items oi
+       JOIN products p ON oi.product_id = p.id
+       WHERE oi.order_id=?`,
+      [req.params.orderId]
+    );
+    res.json(rows);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+
+
   // ================== 404 fallback ==================
   app.use((req, res) => {
     res.status(404).json({ success: false, message: "Not found" });
