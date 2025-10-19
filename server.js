@@ -369,13 +369,23 @@ app.delete("/products/:id", verifyAdmin, async (req, res) => {
     res.json(rows);
   });
 
-  app.post("/news", verifyAdmin, async (req, res) => {
-    const { title, content, image } = req.body;
-    await db.execute(
-      "INSERT INTO news (title, content, image) VALUES (?, ?, ?)",
-      [title, content, image]
-    );
-    res.json({ success: true, message: "Thêm tin tức thành công" });
+  app.post("/news", 
+    verifyAdmin, 
+    upload.single("image"),
+    async (req, res) => {
+      try {
+        const {title, content} = req.body;
+        const image = req.file ? `/uploads/${req.file.filename}` : null;
+
+        await db.execute(
+          "INSERT INTO news (title, content, image) VALUES (?, ?, ?)",
+          [title, content, image]
+        );
+        res.json({ success: true, message: "Thêm tin tức thành công" });
+      } catch (err) {
+        console.error("❌ Lỗi thêm tin tức:", err.message);
+        res.status(500).json({ success: false, message: "Lỗi server" }); 
+      }
   });
 
   app.put("/news/:id", verifyAdmin, async (req, res) => {
