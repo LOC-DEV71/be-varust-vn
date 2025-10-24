@@ -409,7 +409,7 @@ app.post("/cart", async (req, res) => {
   const { user_id, product_id, quantity } = req.body;
 
   try {
-    // Kiểm tra sản phẩm đã có trong giỏ hàng chưa (status = false = chưa checkout)
+    // Kiểm tra sản phẩm đã có trong giỏ hàng chưa (status=false)
     const [rows] = await db.execute(
       "SELECT id, quantity FROM carts WHERE user_id=? AND product_id=? AND status=false",
       [user_id, product_id]
@@ -418,13 +418,13 @@ app.post("/cart", async (req, res) => {
     if (rows.length > 0) {
       // Nếu có thì cộng dồn số lượng
       const newQuantity = rows[0].quantity + quantity;
-      await db.execute(
-        "UPDATE carts SET quantity=? WHERE id=?",
-        [newQuantity, rows[0].id]
-      );
+      await db.execute("UPDATE carts SET quantity=? WHERE id=?", [
+        newQuantity,
+        rows[0].id,
+      ]);
       return res.json({ success: true, message: "Cập nhật số lượng giỏ hàng" });
     } else {
-      // Nếu chưa có thì thêm mới (status=false mặc định)
+      // Nếu chưa có thì thêm mới
       await db.execute(
         "INSERT INTO carts (user_id, product_id, quantity, status) VALUES (?, ?, ?, false)",
         [user_id, product_id, quantity]
@@ -432,13 +432,41 @@ app.post("/cart", async (req, res) => {
       return res.json({ success: true, message: "Đã thêm vào giỏ hàng" });
     }
   } catch (err) {
-    console.error("❌ Lỗi khi thêm giỏ hàng:", err);
+    console.error("❌ Lỗi thêm giỏ hàng:", err);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
 
+// 2. Get Cart by User
+app.get("/cart/:userId", async (req, res) => {
+  const { userId } = req.params;
 
-// 3. Update Cart Item (quantity, status, ...)
+  try {
+    const [rows] = await db.execute(
+      `SELECT 
+          c.id AS cart_id,
+          c.user_id,
+          c.product_id,
+          c.quantity,
+          c.status,
+          c.created_at,
+          p.title,
+          p.price,
+          p.image
+       FROM carts c
+       JOIN products p ON c.product_id = p.id
+       WHERE c.user_id = ? AND c.status=false`,
+      [userId]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Lỗi lấy giỏ hàng:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+// 3. Update Cart Item
 app.put("/cart/:id", async (req, res) => {
   const { id } = req.params;
   const { quantity, status } = req.body;
@@ -446,7 +474,7 @@ app.put("/cart/:id", async (req, res) => {
   try {
     let query = "UPDATE carts SET ";
     const params = [];
-    
+
     if (quantity !== undefined) {
       query += "quantity=?, ";
       params.push(quantity);
@@ -454,18 +482,17 @@ app.put("/cart/:id", async (req, res) => {
 
     if (status !== undefined) {
       query += "status=?, ";
-      params.push(status);
+      params.push(status ? true : false);
     }
 
-    // Xóa dấu "," cuối cùng
-    query = query.slice(0, -2); 
+    query = query.slice(0, -2); // bỏ dấu , cuối
     query += " WHERE id=?";
     params.push(id);
 
     await db.execute(query, params);
     res.json({ success: true, message: "Cập nhật giỏ hàng thành công" });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Lỗi update giỏ hàng:", err);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
@@ -478,7 +505,7 @@ app.delete("/cart/:id", async (req, res) => {
     await db.execute("DELETE FROM carts WHERE id=?", [id]);
     res.json({ success: true, message: "Xóa sản phẩm khỏi giỏ hàng thành công" });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Lỗi xóa giỏ hàng:", err);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
@@ -508,13 +535,14 @@ app.get("/orders/user/:userId", verifyToken, async (req, res) => {
   }
 });
 
-// Đặt hàng từ giỏ hàng
+//đặt hàng từ giỏ hàng
+
 app.post("/orders", verifyToken, async (req, res) => {
   const { receiver_name, phone, address } = req.body;
   const userId = req.user.id;
 
   try {
-    // Lấy giỏ hàng chưa checkout (status=false)
+    // Lấy giỏ hàng chưa checkout
     const [cartItems] = await db.execute(
       `SELECT c.*, p.price 
        FROM carts c 
@@ -538,7 +566,7 @@ app.post("/orders", verifyToken, async (req, res) => {
 
     const orderId = orderResult.insertId;
 
-    // Thêm chi tiết order_items
+    // Thêm order_items
     for (let item of cartItems) {
       await db.execute(
         "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
@@ -546,7 +574,7 @@ app.post("/orders", verifyToken, async (req, res) => {
       );
     }
 
-    // Cập nhật status giỏ hàng thành true (đã checkout)
+    // Update status giỏ hàng -> true
     await db.execute("UPDATE carts SET status=true WHERE user_id=?", [userId]);
 
     res.json({ success: true, message: "Đặt hàng thành công", order_id: orderId });
@@ -555,8 +583,6 @@ app.post("/orders", verifyToken, async (req, res) => {
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
-
-
 
 // Cập nhật trạng thái đơn hàng (admin)
 app.put("/orders/:id", verifyAdmin, async (req, res) => {
