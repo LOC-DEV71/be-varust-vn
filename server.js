@@ -556,10 +556,12 @@ app.post("/orders", verifyToken, async (req, res) => {
     // Thêm order_items
     for (let item of cartItems) {
       await db.execute(
-        "INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
-        [orderId, item.product_id, item.quantity, item.price]
+        `INSERT INTO order_items (order_id, product_id, quantity, price, product_title, product_image) 
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderId, item.product_id, item.quantity, item.price, item.title, item.image]
       );
     }
+
 
     // Xoá giỏ hàng sau khi đặt
     await db.execute("DELETE FROM carts WHERE user_id=?", [userId]);
@@ -597,10 +599,7 @@ app.delete("/orders/:id", verifyAdmin, async (req, res) => {
 app.get("/order-items/:orderId", verifyToken, async (req, res) => {
   try {
     const [rows] = await db.execute(
-      `SELECT oi.*, p.title, p.image 
-       FROM order_items oi
-       JOIN products p ON oi.product_id = p.id
-       WHERE oi.order_id=?`,
+      "SELECT id, order_id, product_id, quantity, price, product_title, product_image FROM order_items WHERE order_id=?",
       [req.params.orderId]
     );
     res.json(rows);
@@ -608,6 +607,7 @@ app.get("/order-items/:orderId", verifyToken, async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 
 
