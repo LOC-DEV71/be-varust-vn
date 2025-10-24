@@ -530,13 +530,14 @@ app.post("/orders", verifyToken, async (req, res) => {
 
   try {
     // Lấy giỏ hàng
-    const [cartItems] = await db.execute(
-      `SELECT c.*, p.price 
+        const [cartItems] = await db.execute(
+      `SELECT c.*, p.price, p.title, p.image 
        FROM carts c 
        JOIN products p ON c.product_id = p.id 
        WHERE c.user_id=?`,
       [userId]
     );
+
 
     if (cartItems.length === 0) {
       return res.status(400).json({ success: false, message: "Giỏ hàng trống" });
