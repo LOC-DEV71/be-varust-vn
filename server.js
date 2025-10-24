@@ -460,37 +460,30 @@ app.get("/cart/:userId", async (req, res) => {
 });
 
 
-// 3. Update Cart Item (quantity, status, ...)
+// 3. Update Cart Item (chỉ cập nhật quantity vì carts KHÔNG còn cột status)
 app.put("/cart/:id", async (req, res) => {
   const { id } = req.params;
-  const { quantity, status } = req.body;
+  const { quantity } = req.body;
 
   try {
-    let query = "UPDATE carts SET ";
-    const params = [];
-    
-    if (quantity !== undefined) {
-      query += "quantity=?, ";
-      params.push(quantity);
+    if (quantity === undefined) {
+      return res.status(400).json({ success: false, message: "Thiếu quantity" });
     }
 
-    if (status !== undefined) {
-      query += "status=?, ";
-      params.push(status);
+    // Nếu quantity <= 0 thì coi như xoá item luôn (tuỳ bạn, có thể bỏ đoạn này)
+    if (Number(quantity) <= 0) {
+      await db.execute("DELETE FROM carts WHERE id=?", [id]);
+      return res.json({ success: true, message: "Đã xoá sản phẩm khỏi giỏ" });
     }
 
-    // Xóa dấu "," cuối cùng
-    query = query.slice(0, -2); 
-    query += " WHERE id=?";
-    params.push(id);
-
-    await db.execute(query, params);
+    await db.execute("UPDATE carts SET quantity=? WHERE id=?", [quantity, id]);
     res.json({ success: true, message: "Cập nhật giỏ hàng thành công" });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Lỗi update giỏ hàng:", err);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
+
 
 // 4. Delete Cart Item
 app.delete("/cart/:id", async (req, res) => {
