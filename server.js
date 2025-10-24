@@ -609,15 +609,24 @@ app.post("/orders", verifyToken, async (req, res) => {
 // Cập nhật trạng thái đơn hàng (admin)
 app.put("/orders/:id", verifyAdmin, async (req, res) => {
   const { status } = req.body;
-  console.log("Update order:", req.params.id, "to status:", status);
+  const orderId = req.params.id;
+  console.log("Update order:", orderId, "to status:", status);
+
   try {
-    await db.execute("UPDATE orders SET status=? WHERE id=?", [status, req.params.id]);
+    const [result] = await db.execute("UPDATE orders SET status=? WHERE id=?", [status, orderId]);
+    console.log("Query result:", result);
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ success: false, message: "Không tìm thấy đơn hàng" });
+    }
+
     res.json({ success: true, message: "Cập nhật trạng thái đơn hàng thành công" });
   } catch (err) {
     console.error("Update order error:", err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
+
 
 
 // Xoá đơn hàng (admin)
