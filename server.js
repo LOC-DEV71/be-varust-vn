@@ -547,7 +547,7 @@ app.post("/orders", verifyToken, async (req, res) => {
       `SELECT c.*, p.price 
        FROM carts c 
        JOIN products p ON c.product_id = p.id 
-       WHERE c.user_id=? AND c.status='false'`,
+       WHERE c.user_id=? AND c.status=0`,
       [userId]
     );
 
@@ -574,15 +574,16 @@ app.post("/orders", verifyToken, async (req, res) => {
       );
     }
 
-    // Update status giỏ hàng -> true
-    await db.execute("UPDATE carts SET status='true' WHERE user_id=?", [userId]);
+    // Update status giỏ hàng -> 1 (đã checkout)
+    await db.execute("UPDATE carts SET status=1 WHERE user_id=?", [userId]);
 
     res.json({ success: true, message: "Đặt hàng thành công", order_id: orderId });
   } catch (err) {
-    console.error(err);
+    console.error("❌ Lỗi đặt hàng:", err);
     res.status(500).json({ success: false, message: "Lỗi server" });
   }
 });
+
 
 // Cập nhật trạng thái đơn hàng (admin)
 app.put("/orders/:id", verifyAdmin, async (req, res) => {
