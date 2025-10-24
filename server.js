@@ -446,13 +446,14 @@ app.get("/cart/:userId", async (req, res) => {
           c.created_at,
           p.title,
           p.price,
-          p.image
+          p.sale,
+          p.image,
+          ROUND(p.price * (1 - IFNULL(p.sale,0)/100), 2) AS final_price
        FROM carts c
        JOIN products p ON c.product_id = p.id
        WHERE c.user_id = ?`,
       [req.params.userId]
     );
-
     res.json(rows);
   } catch (err) {
     res.status(500).json({ success: false, message: "Lỗi server" });
@@ -528,48 +529,79 @@ app.post("/orders", verifyToken, async (req, res) => {
   const { receiver_name, phone, address } = req.body;
   const userId = req.user.id;
 
+  // hàm tính giá sau giảm, có clamp giá trị sale
+  const final = (price, sale) => {
+    const s = Math.min(Math.max(Number(sale || 0), 0), 100); // 0..100
+    const p = Number(price) || 0;
+    // làm tròn 2 chữ số để khớp DECIMAL(10,2)
+    return Math.round(p * (1 - s / 100) * 100) / 100;
+  };
+
+  const conn = await db.getConnection();
   try {
-    // Lấy giỏ hàng
-        const [cartItems] = await db.execute(
-      `SELECT c.*, p.price, p.title, p.image 
-       FROM carts c 
-       JOIN products p ON c.product_id = p.id 
-       WHERE c.user_id=?`,
+    await conn.beginTransaction();
+
+    // Lấy giỏ hàng kèm sale + thông tin sp
+    const [cartItems] = await conn.execute(
+      `SELECT c.id   AS cart_id,
+              c.product_id,
+              c.quantity,
+              p.price,
+              p.sale,
+              p.title,
+              p.image
+       FROM carts c
+       JOIN products p ON c.product_id = p.id
+       WHERE c.user_id = ?`,
       [userId]
     );
 
-
     if (cartItems.length === 0) {
+      await conn.rollback();
       return res.status(400).json({ success: false, message: "Giỏ hàng trống" });
     }
 
-    // Tính tổng
-    const total = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+    // Tính tổng theo giá đã giảm
+    const total = cartItems.reduce((sum, it) => {
+      const fp = final(it.price, it.sale);
+      return sum + fp * it.quantity;
+    }, 0);
+    const totalRounded = Math.round(total * 100) / 100;
 
-    // Tạo order
-    const [orderResult] = await db.execute(
-      "INSERT INTO orders (user_id, receiver_name, phone, address, total, status) VALUES (?, ?, ?, ?, ?, 'pending')",
-      [userId, receiver_name, phone, address, total]
+    // Tạo đơn hàng
+    const [orderResult] = await conn.execute(
+      `INSERT INTO orders (user_id, receiver_name, phone, address, total, status)
+       VALUES (?, ?, ?, ?, ?, 'pending')`,
+      [userId, receiver_name, phone, address, totalRounded]
     );
-
     const orderId = orderResult.insertId;
 
-    // Thêm order_items
-    for (let item of cartItems) {
-      await db.execute(
-        `INSERT INTO order_items (order_id, product_id, quantity, price, product_title, product_image) 
-        VALUES (?, ?, ?, ?, ?, ?)`,
-        [orderId, item.product_id, item.quantity, item.price, item.title, item.image]
+    // Ghi từng dòng order_items với giá đã giảm
+    for (const it of cartItems) {
+      const finalPrice = final(it.price, it.sale);
+      await conn.execute(
+        `INSERT INTO order_items (order_id, product_id, quantity, price, product_title, product_image)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [orderId, it.product_id, it.quantity, finalPrice, it.title, it.image]
       );
     }
 
+    // Xoá giỏ
+    await conn.execute("DELETE FROM carts WHERE user_id=?", [userId]);
 
-    // Xoá giỏ hàng sau khi đặt
-    await db.execute("DELETE FROM carts WHERE user_id=?", [userId]);
-
-    res.json({ success: true, message: "Đặt hàng thành công", order_id: orderId });
+    await conn.commit();
+    return res.json({
+      success: true,
+      message: "Đặt hàng thành công",
+      order_id: orderId,
+      total: totalRounded
+    });
   } catch (err) {
-    res.status(500).json({ success: false, message: "Lỗi server" });
+    await conn.rollback();
+    console.error("Order error:", err);
+    return res.status(500).json({ success: false, message: "Lỗi server" });
+  } finally {
+    conn.release();
   }
 });
 
