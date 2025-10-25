@@ -699,6 +699,41 @@ app.get("/stats/revenue/week", verifyAdmin, async (req, res) => {
 });
 
 
+// Doanh thu theo 12 tháng của năm hiện tại (có format VND)
+app.get("/stats/revenue/year", verifyAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT m.month,
+             IFNULL(SUM(o.total), 0) AS revenue,
+             COUNT(o.id) AS orders
+      FROM (
+        SELECT 1 AS month UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 
+        UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 
+        UNION SELECT 9 UNION SELECT 10 UNION SELECT 11 UNION SELECT 12
+      ) m
+      LEFT JOIN orders o
+        ON MONTH(o.created_at) = m.month
+       AND YEAR(o.created_at) = YEAR(CURDATE())
+       AND o.status = 'completed'
+      GROUP BY m.month
+      ORDER BY m.month
+    `);
+
+    // Format revenue thành VND (dùng .toLocaleString)
+    const data = rows.map(r => ({
+      ...r,
+      revenue: Number(r.revenue).toLocaleString("vi-VN"), // 30000000 -> "30.000.000"
+    }));
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("❌ Lỗi thống kê doanh thu năm:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+
+
 
 
 
