@@ -655,6 +655,52 @@ app.get("/order-items/:orderId", verifyToken, async (req, res) => {
 
 
 
+// Doanh số theo tháng
+app.get("/stats/revenue/month", verifyAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT 
+        DATE_FORMAT(created_at, '%Y-%m') AS month,
+        SUM(total) AS revenue,
+        COUNT(id) AS orders
+      FROM orders
+      WHERE status = 'completed'
+      GROUP BY DATE_FORMAT(created_at, '%Y-%m')
+      ORDER BY month ASC
+    `);
+
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Lỗi thống kê doanh số tháng:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+
+// Doanh số theo tuần
+app.get("/stats/revenue/week", verifyAdmin, async (req, res) => {
+  try {
+    const [rows] = await db.execute(`
+      SELECT 
+        YEARWEEK(created_at, 1) AS week,
+        SUM(total) AS revenue,
+        COUNT(id) AS orders
+      FROM orders
+      WHERE status = 'completed'
+      GROUP BY YEARWEEK(created_at, 1)
+      ORDER BY week ASC
+    `);
+
+    res.json(rows);
+  } catch (err) {
+    console.error("❌ Lỗi thống kê doanh số tuần:", err);
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+
+
+
 
   // ================== 404 fallback ==================
   app.use((req, res) => {
