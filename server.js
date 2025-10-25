@@ -733,6 +733,52 @@ app.get("/stats/revenue/year", verifyAdmin, async (req, res) => {
 });
 
 
+// Đổi mật khẩu
+app.put("/change-password", verifyToken, async (req, res) => {
+  const { oldPassword, newPassword } = req.body;
+  const userId = req.user.id;
+
+  if (!oldPassword || !newPassword) {
+    return res.status(400).json({ success: false, message: "Thiếu mật khẩu" });
+  }
+
+  try {
+    const [rows] = await db.execute("SELECT password FROM users WHERE id=?", [userId]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "User không tồn tại" });
+
+    const user = rows[0];
+    const isMatch = await bcrypt.compare(oldPassword, user.password);
+    if (!isMatch) return res.status(401).json({ success: false, message: "Mật khẩu cũ không đúng" });
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await db.execute("UPDATE users SET password=? WHERE id=?", [hashed, userId]);
+
+    res.json({ success: true, message: "Đổi mật khẩu thành công" });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
+
+
+
+// Quên mật khẩu (random mật khẩu mới)
+app.post("/forgot-password", async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ success: false, message: "Thiếu email" });
+
+  try {
+    const [rows] = await db.execute("SELECT id FROM users WHERE email=?", [email]);
+    if (rows.length === 0) return res.status(404).json({ success: false, message: "Email không tồn tại" });
+
+    const newPass = Math.random().toString(36).slice(-8); // random 8 ký tự
+    const hashed = await bcrypt.hash(newPass, 10);
+    await db.execute("UPDATE users SET password=? WHERE email=?", [hashed, email]);
+
+    res.json({ success: true, message: "Mật khẩu mới đã được reset", newPassword: newPass });
+  } catch (err) {
+    res.status(500).json({ success: false, message: "Lỗi server" });
+  }
+});
 
 
 
